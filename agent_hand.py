@@ -7,6 +7,8 @@ import logging.handlers
 import httplib
 import json
 import ConfigParser
+from agent_cmd import AgentCmd
+
 
 
 LOG_FILE = 'agent.log'
@@ -21,6 +23,8 @@ global child_staus_
 global signal_
 global config_
 global logger
+global agent_cmd
+
 
 def run_job():
     global child_
@@ -56,16 +60,18 @@ def heartbeat():
     ag_manager_port=config_.get("agent_manager","port")
     try:
 
-        conn = httplib.HTTPConnection(ag_manager_host,ag_manager_port,timeout=2)
-        conn.request("GET", "/agent_data")
-        r1 = conn.getresponse()
-        logger.debug("conn get response status:%s reason:%s,content:%s" %(r1.status, r1.reason,r1.read())) 
-        ag_mamnager_cmd=json.loads(r1.read())
+        conn = httplib.HTTPConnection(ag_manager_host,ag_manager_port,timeout=5)
 
-        signal_="start" #from agent_message
+        if child_ is None:
 
+            conn.request("GET", "/agent_data?agent_cmd={\"cmd\":\"WAIT\",\"client_id\":\"wyyhzc-20160414\"}")
+            r1 = conn.getresponse()
+            logger.debug("get response status:%s reason:%s,content:%s" %(r1.status, r1.reason,r1.read()))
 
-        if  child_ is not None:
+            ag_mamnager_cmd=json.loads(r1.read())
+            signal_="start" #from agent_message
+
+        else:
             if subprocess.Popen.poll(child_) is not None:
                 logger.debug("job is end...")
                 child_=None
@@ -75,25 +81,29 @@ def heartbeat():
                 logger.debug("cmd_line:%s child_prcess_status:%s"% (s,child_staus_))
 
     except Exception,e:
-        logger.error("conn is error Host[%s] port[%s]"%(ag_manager_host,ag_manager_port))
+        logger.error("Error msg:%s",e)
+        logger.error("Error Connect to agent_manager { Host[%s] port[%s] }"%(ag_manager_host,ag_manager_port))
 
-    sleep(20)
+    sleep(15)
 
 if __name__=="__main__":
 #    agent_manager_host=sys.argv[1]
     config_ = ConfigParser.ConfigParser()
     config_.read("agent_cfg.ini")
-    
+
     global child_
     global signal_
     global logger
+    global agent_cmd
 
+    agent_cmd=AgentCmd()
+    
     logger = logging.getLogger(config_.get("agent","id"))
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
-    
 
-    
+    agent_cmd.client_id=config_.get("agent","id")
+
     child_=None
     signal_=None
     count=0

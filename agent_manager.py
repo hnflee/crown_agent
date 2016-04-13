@@ -9,17 +9,16 @@ class myHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         if self.path == "agent_hand":
-            agent_process()
+            self.wfile.write("test")
         elif self.path == "core_manager":
             core_process()
 
     def agent_process():
-
+        self.wfile.write("test")
 
     def core_process():
+        self.wfile.write("test")
 
-
-#        self.wfile.write("test")
 
 
 
