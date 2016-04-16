@@ -29,6 +29,8 @@ def run_job():
     logger.debug("run job start......")
     #check job version id
     try:
+
+        child_staus_="prerun"
         conn=httplib.HTTPConnection(ag_manager_host,ag_manager_port,timeout=5)
         conn.request("GET", "%s%s.ver"%(res_url,file_name))
         r1=conn.getresponse()
@@ -40,36 +42,54 @@ def run_job():
 
         if not os.path.exists("%s/%s.ver"%(load_file_path,file_name)):
             #will wget file
-            subprocess.call("wget -P %s http://%s:%s%s%s.ver"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
-            logger.debug("wget -P %s http://%s:%s%s%s.ver is success!"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name))
+            wget_file(load_file_path)
         else:
-            file_version_local=open("%s/%s.ver"%(load_file_path,file_name))
+            file_local_ver_=open("%s%s.ver"%(load_file_path,file_name))
+            logger.debug("open %s%s.ver is success!"%(load_file_path,file_name))
             try:
-                file_version_local_content=file_version_local.read()
+                file_version_local_content=file_local_ver_.read()
+                logger
+                if file_version!=file_version_local_content:
+                    logger.debug("local file version is not lastest { local:%s  remote:%s}"%(file_version_local_content,file_version))
+                    subprocess.call("rm %s%s*"%(load_file_path,file_name),shell=True)
+                    wget_file(load_file_path)
+                else:
+                    logger.debug("local file version is lastest{local:%s  remote:%s }"%(file_version_local_content,file_version)) 
             except Exception,e:
-                logger.error("open file error %s"%(e))
-                file_version_local.close()
-            
-        
-        
-        child_=subprocess.Popen('/usr/bin/java -jar /opt/hadoop/python/project/crown_agent/aerotest.jar',stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True)
-        child_staus_="RUN"
+                logger.error("read file error %s"%(e))
+                file_local_ver_.close()
+
+        child_=subprocess.Popen("/usr/bin/java -jar %s%s"%(load_file_path,file_name),stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True)
+        child_staus_="run"
     except Exception,e:
         logger.error("Error msg:%s",e)
         logger.error("Error Connect to agent_manager { Host[%s] port[%s] }"%(ag_manager_host,ag_manager_port))
+
+def wget_file(load_file_path):
+    global child_,child_staus_,ag_manager_host,ag_manager_port,res_url,file_sha1,file_version,file_name
+    subprocess.call("wget -P %s http://%s:%s%s%s.ver"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
+    subprocess.call("wget -c -t 20 -P %s http://%s:%s%s%s"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
+    subprocess.call("wget -P %s http://%s:%s%s%s.sha1"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
+    logger.debug("wget -P %s http://%s:%s%s%s.ver[jar/sha1] is success!"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name))
+    #check sha1
+    file_local_sign_=open("%s%s.sha1"%(load_file_path,file_name))
+    try:
+        file_local_sign=file_local_sign_.readline()
+
+    except Exception,e:
+        logger.error("wget file Error:%s"%e)
 
 def terminal_child_process():
     print "terminal......"
     if child_ is not None:
         # clear process data to manager
         child_.terminate()
-        child_staus_="FINAL"
+        child_staus_=None
         logger.debug("termianl .. is end")
 
 
 def heartbeat():
     global child_,logger,signal_,job_id,res_url,child_staus_,file_name
-    
     logger.debug(" heartbeat send ..... ")
 
     try:
@@ -78,7 +98,7 @@ def heartbeat():
         if child_ is None:
 
             logger.debug("agent heartbeat url:\"/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\"}"%(ag_manager_root,signal_,client_id))
-            conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\""%(ag_manager_root,signal_,client_id))
+            conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\"}"%(ag_manager_root,signal_,client_id))
             r1 = conn.getresponse()
             repsone_json_data=r1.read()
             logger.debug("get response status:%s reason:%s,content:%s" %(r1.status, r1.reason,repsone_json_data))
@@ -86,16 +106,15 @@ def heartbeat():
             ag_manager_cmd=json.loads(repsone_json_data)
             logger.debug("tran json data[%s] is success! "%(repsone_json_data))
 
-            agent_cmd=ag_manager_cmd["CMD"]
+            agent_cmd=ag_manager_cmd["cmd"]
             logger.debug("json data from agentManger cmd[%s] "%(agent_cmd))
-            
-            
-            if agent_cmd =="START":
-                signal_="START"
-                job_id=ag_manager_cmd["COMMAND"]["job_id"]
-                res_url=ag_manager_cmd["COMMAND"]["res_url"]
-                file_name=ag_manager_cmd["COMMAND"]["file_name"]
-                
+
+            if agent_cmd =="start":
+                signal_="start"
+                job_id=ag_manager_cmd["command"]["job_id"]
+                res_url=ag_manager_cmd["command"]["res_url"]
+                file_name=ag_manager_cmd["command"]["file_name"]
+
 
 
         else:
@@ -104,27 +123,24 @@ def heartbeat():
                 # syn end stat to agent_manager 
                 child_=None
                 child_staus_=None
-                signal_="WAIT"
-            else:
+                signal_="wait"
+            elif child_staus_=="run":
                 s=child_.stdout.readline()
                 #syn processing to agent_manager
-                signal_="RUNNING"
+                signal_="run"
+                conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\",\"job_id\":\"%s\",\"job_process\":\"%s\"}"%(ag_manager_root,signal_,client_id,job_id,s))
                 #will drill terminal sigal from manager
-
-                
                 logger.debug("cmd_line:%s child_prcess_status:%s"% (s,child_staus_))
-        
-         
+
     except Exception,e:
         logger.error("Error msg:%s",e)
         logger.error("Error Connect to agent_manager { Host[%s] port[%s] }"%(ag_manager_host,ag_manager_port))
-
     sleep(15)
 
 if __name__=="__main__":
 #    agent_manager_host=sys.argv[1]
     global config_,client_id,ag_manager_host,ag_manager_port,ag_manager_root,child_,signal_,logger
-    
+
     config_ = ConfigParser.ConfigParser()
     config_.read("agent_cfg.ini")
 
@@ -132,22 +148,19 @@ if __name__=="__main__":
     ag_manager_host=config_.get("agent_manager","host")
     ag_manager_port=config_.get("agent_manager","port")
     ag_manager_root=config_.get("agent_manager","root")
- 
+
     logger = logging.getLogger(config_.get("agent","id"))
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
 
-    
     child_=None
-    signal_=None
+    signal_="wait"
     count=0
     while 1:
         heartbeat()
         count=count+1
         print"from  manager signal:%s" %(signal_)
-        if signal_== "START" and child_ is None:
+        if signal_== "start" and child_ is None:
             run_job()
         if signal_ == "terminal":
             terminal_child_process()
-
-
