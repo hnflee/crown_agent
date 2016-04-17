@@ -9,7 +9,7 @@ import json
 import ConfigParser
 import time
 import os.path
-
+import hashlib
 
 #------ init log------- 
 LOG_FILE = 'agent.log'
@@ -45,7 +45,7 @@ def run_job():
             wget_file(load_file_path)
         else:
             file_local_ver_=open("%s%s.ver"%(load_file_path,file_name))
-            logger.debug("open %s%s.ver is success!"%(load_file_path,file_name))
+            logger.debug("open  %s%s.ver is success!"%(load_file_path,file_name))
             try:
                 file_version_local_content=file_local_ver_.read()
                 logger
@@ -75,7 +75,19 @@ def wget_file(load_file_path):
     file_local_sign_=open("%s%s.sha1"%(load_file_path,file_name))
     try:
         file_local_sign=file_local_sign_.readline()
-
+        hash_new = hashlib.sha1() 
+        with open('%s%s'%(load_file_path,file_name),'rb') as fp:
+            while True:
+                data = fp.read()
+                if not data:
+                    break
+                hash_new.update(data)
+        hash_value = hash_new.hexdigest()
+        logger.debug("file sha1:%s{orgin sha1:%s}  "%(hash_value,file_local_sign)) 
+        if str.upper(hash_value) != str.upper(file_local_sign):
+            logger.debug("file sha1 not right will retry wget ")
+            subprocess.call("rm %s%s"%(load_file_path,file_name),shell=True)
+            subprocess.call("wget -c -t 20 -P %s http://%s:%s%s%s"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
     except Exception,e:
         logger.error("wget file Error:%s"%e)
 
