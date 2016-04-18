@@ -138,6 +138,7 @@ def heartbeat():
                 signal_="wait"
             elif child_staus_=="run":
                 s=child_.stdout.readline()
+                s=s.replace('\n','').replace('\r','')
                 #syn processing to agent_manager
                 signal_="run"
                 conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\",\"job_id\":\"%s\",\"job_process\":\"%s\"}"%(ag_manager_root,signal_,client_id,job_id,s))
