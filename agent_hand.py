@@ -92,16 +92,18 @@ def wget_file(load_file_path):
         logger.error("wget file Error:%s"%e)
 
 def terminal_child_process():
-    print "terminal......"
+    global child_,logger,signal_,job_id,res_url,child_staus_,file_name,client_id
     if child_ is not None:
         # clear process data to manager
         child_.terminate()
         child_staus_=None
-        logger.debug("termianl .. is end")
+        signal_="terminaled"
+        conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\",\"job_id\":\"%s\"}"%(ag_manager_root,signal_,client_id,job_id)) 
+        logger.debug("client_id:%s job_id:%s  is terminal!"%(job_id,client_id))
 
 
 def heartbeat():
-    global child_,logger,signal_,job_id,res_url,child_staus_,file_name
+                     global child_,logger,signal_,job_id,res_url,child_staus_,file_name,client_id
     logger.debug(" heartbeat send ..... ")
 
     try:
