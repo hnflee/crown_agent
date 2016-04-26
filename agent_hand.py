@@ -1,7 +1,8 @@
-import os
+import os,sys
 import signal
 import subprocess
 from time import sleep
+from daemon import Daemon
 import logging
 import logging.handlers
 import httplib
@@ -21,6 +22,26 @@ handler.setFormatter(formatter)
 
 #--------init param ----
 global ag_manager_host,ag_manager_port,ag_manager_root,child_,child_staus_,signal_,config_,logger,agent_cmd,client_id,job_id,res_url,file_sha1,file_version,file_name
+
+
+class Mydaemon(Daemon):
+    def __init__(self, pidfile):
+        Daemon.__init__(self,pidfile,stdout = '/tmp/watch_stdout.log',stderr='/tmp/watch_stderr.log')
+
+
+    def _run(self):
+        global config_,client_id,ag_manager_host,ag_manager_port,ag_manager_root,child_,signal_,logger
+        count=0
+        while 1:
+            heartbeat()
+            count=count+1
+            print"from  manager signal:%s" %(signal_)
+            if signal_== "start" and child_ is None:
+                run_job()
+            if signal_ == "terminal":
+                terminal_child_process()
+            time.sleep(2)
+
 
 
 def run_job():
@@ -103,7 +124,7 @@ def terminal_child_process():
 
 
 def heartbeat():
-                     global child_,logger,signal_,job_id,res_url,child_staus_,file_name,client_id
+    global child_,logger,signal_,job_id,res_url,child_staus_,file_name,client_id
     logger.debug(" heartbeat send ..... ")
 
     try:
@@ -150,7 +171,7 @@ def heartbeat():
     except Exception,e:
         logger.error("Error msg:%s",e)
         logger.error("Error Connect to agent_manager { Host[%s] port[%s] }"%(ag_manager_host,ag_manager_port))
-    sleep(15)
+
 
 if __name__=="__main__":
 #    agent_manager_host=sys.argv[1]
@@ -170,12 +191,19 @@ if __name__=="__main__":
 
     child_=None
     signal_="wait"
-    count=0
-    while 1:
-        heartbeat()
-        count=count+1
-        print"from  manager signal:%s" %(signal_)
-        if signal_== "start" and child_ is None:
-            run_job()
-        if signal_ == "terminal":
-            terminal_child_process()
+
+    daemon = Mydaemon('/tmp/watch_process.pid')
+    if len(sys.argv) == 2:
+        if 'start' == sys.argv[1]:
+            daemon.start()
+        elif 'stop' == sys.argv[1]:
+            daemon.stop()
+        elif 'restart' == sys.argv[1]:
+            daemon.restart()
+        else:
+            log.debug('unknown command')
+            sys.exit(2)
+        sys.exit(0)
+    else:
+        log.debug('usage: %s start|stop|restart' % sys.argv[0])
+        sys.exit(2)  
