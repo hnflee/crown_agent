@@ -33,6 +33,7 @@ class Mydaemon(Daemon):
         global config_,client_id,ag_manager_host,ag_manager_port,ag_manager_root,child_,signal_,logger
         count=0
         while 1:
+            check_master_process_version()
             heartbeat()
             count=count+1
             print"from  manager signal:%s" %(signal_)
@@ -43,6 +44,39 @@ class Mydaemon(Daemon):
             time.sleep(2)
 
 
+
+def check_master_process_version():
+    global child_,child_staus_,ag_manager_host,ag_manager_port
+
+    check_file_name="agent_hand.py"
+    url_res="/agent_manager/data/"
+    load_file_path=config_.get("agent","load_file_path")
+
+    conn=httplib.HTTPConnection(ag_manager_host,ag_manager_port,timeout=5)
+    conn.request("GET", "%s%s.ver"%(url_res,check_file_name))
+    r1=conn.getresponse()
+    file_version=r1.read()
+    
+    if not os.path.exists("%s/%s.ver"%(load_file_path,check_file_name)):
+    #will wget file
+        wget_file(load_file_path,check_file_name,url_res)
+        logger.debug("file not contain wget  %s%s.ver is success!"%(load_file_path,check_file_name))
+    else:
+        file_local_ver_=open("%s%s.ver"%(load_file_path,check_file_name))
+        
+        try:
+            file_version_local_content=file_local_ver_.read()
+            if file_version.upper()!=file_version_local_content.upper():
+                logger.debug("master process  file version is not lastest { local:%s  remote:%s}"%(file_version_local_content,file_version))
+                subprocess.call("rm %s%s*"%(load_file_path,check_file_name),shell=True)
+                wget_file(load_file_path,check_file_name,url_res)
+          
+            else:
+                logger.debug("master process  file version is lastest{local:%s  remote:%s }"%(file_version_local_content,file_version))
+          
+        except Exception,e:
+            logger.error("read file error %s"%(e))
+        file_local_ver_.close()
 
 def run_job():
     global child_,child_staus_,ag_manager_host,ag_manager_port,res_url,file_sha1,file_version,file_name
@@ -63,17 +97,17 @@ def run_job():
 
         if not os.path.exists("%s/%s.ver"%(load_file_path,file_name)):
             #will wget file
-            wget_file(load_file_path)
+            wget_file(load_file_path,file_name,res_url)
         else:
             file_local_ver_=open("%s%s.ver"%(load_file_path,file_name))
             logger.debug("open  %s%s.ver is success!"%(load_file_path,file_name))
             try:
                 file_version_local_content=file_local_ver_.read()
                 logger
-                if file_version!=file_version_local_content:
+                if file_version.upper()!=file_version_local_content.upper():
                     logger.debug("local file version is not lastest { local:%s  remote:%s}"%(file_version_local_content,file_version))
                     subprocess.call("rm %s%s*"%(load_file_path,file_name),shell=True)
-                    wget_file(load_file_path)
+                    wget_file(load_file_path,file_name,res_url)
                 else:
                     logger.debug("local file version is lastest{local:%s  remote:%s }"%(file_version_local_content,file_version)) 
             except Exception,e:
@@ -86,18 +120,18 @@ def run_job():
         logger.error("Error msg:%s",e)
         logger.error("Error Connect to agent_manager { Host[%s] port[%s] }"%(ag_manager_host,ag_manager_port))
 
-def wget_file(load_file_path):
-    global child_,child_staus_,ag_manager_host,ag_manager_port,res_url,file_sha1,file_version,file_name
-    subprocess.call("wget -P %s http://%s:%s%s%s.ver"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
-    subprocess.call("wget -c -t 20 -P %s http://%s:%s%s%s"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
-    subprocess.call("wget -P %s http://%s:%s%s%s.sha1"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
-    logger.debug("wget -P %s http://%s:%s%s%s.ver[jar/sha1] is success!"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name))
+def wget_file(load_file_path,check_file,res_url_path):
+    global child_,child_staus_,ag_manager_host,ag_manager_port,file_sha1,file_version
+    subprocess.call("wget -P %s http://%s:%s%s%s.ver"%(load_file_path,ag_manager_host,ag_manager_port,res_url_path,check_file),shell=True)
+    subprocess.call("wget -c -t 20 -P %s http://%s:%s%s%s"%(load_file_path,ag_manager_host,ag_manager_port,res_url_path,check_file),shell=True)
+    subprocess.call("wget -P %s http://%s:%s%s%s.sha1"%(load_file_path,ag_manager_host,ag_manager_port,res_url_path,check_file),shell=True)
+    logger.debug("wget -P %s http://%s:%s%s%s.ver[jar/sha1] is success!"%(load_file_path,ag_manager_host,ag_manager_port,res_url_path,check_file))
     #check sha1
-    file_local_sign_=open("%s%s.sha1"%(load_file_path,file_name))
+    file_local_sign_=open("%s%s.sha1"%(load_file_path,check_file))
     try:
         file_local_sign=file_local_sign_.readline()
-        hash_new = hashlib.sha1() 
-        with open('%s%s'%(load_file_path,file_name),'rb') as fp:
+        hash_new = hashlib.sha1()
+        with open('%s%s'%(load_file_path,check_file ),'rb') as fp:
             while True:
                 data = fp.read()
                 if not data:
@@ -107,8 +141,8 @@ def wget_file(load_file_path):
         logger.debug("file sha1:%s{orgin sha1:%s}  "%(hash_value,file_local_sign)) 
         if str.upper(hash_value) != str.upper(file_local_sign):
             logger.debug("file sha1 not right will retry wget ")
-            subprocess.call("rm %s%s"%(load_file_path,file_name),shell=True)
-            subprocess.call("wget -c -t 20 -P %s http://%s:%s%s%s"%(load_file_path,ag_manager_host,ag_manager_port,res_url,file_name),shell=True)
+            subprocess.call("rm %s%s"%(load_file_path,check_file),shell=True)
+            subprocess.call("wget -c -t 20 -P %s http://%s:%s%s%s"%(load_file_path,ag_manager_host,ag_manager_port,res_url,check_file),shell=True)
     except Exception,e:
         logger.error("wget file Error:%s"%e)
 
