@@ -56,24 +56,22 @@ def check_master_process_version():
     conn.request("GET", "%s%s.ver"%(url_res,check_file_name))
     r1=conn.getresponse()
     file_version=r1.read()
-    
+
     if not os.path.exists("%s/%s.ver"%(load_file_path,check_file_name)):
     #will wget file
         wget_file(load_file_path,check_file_name,url_res)
         logger.debug("file not contain wget  %s%s.ver is success!"%(load_file_path,check_file_name))
     else:
         file_local_ver_=open("%s%s.ver"%(load_file_path,check_file_name))
-        
+
         try:
             file_version_local_content=file_local_ver_.read()
             if file_version.upper()!=file_version_local_content.upper():
                 logger.debug("master process  file version is not lastest { local:%s  remote:%s}"%(file_version_local_content,file_version))
                 subprocess.call("rm %s%s*"%(load_file_path,check_file_name),shell=True)
                 wget_file(load_file_path,check_file_name,url_res)
-          
             else:
                 logger.debug("master process  file version is lastest{local:%s  remote:%s }"%(file_version_local_content,file_version))
-          
         except Exception,e:
             logger.error("read file error %s"%(e))
         file_local_ver_.close()
