@@ -112,7 +112,7 @@ def run_job():
                 logger.error("read file error %s"%(e))
                 file_local_ver_.close()
 
-        child_=subprocess.Popen("/usr/bin/java -jar %s%s"%(load_file_path,file_name),stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True)
+        child_=subprocess.Popen("java -jar %s%s"%(load_file_path,file_name),stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True)
         child_staus_="run"
     except Exception,e:
         logger.error("Error msg:%s",e)
@@ -162,35 +162,34 @@ def heartbeat():
     try:
         conn = httplib.HTTPConnection(ag_manager_host,ag_manager_port,timeout=5)
 
+        logger.debug("agent heartbeat url:\"/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\"}"%(ag_manager_root,signal_,client_id))
+        conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\"}"%(ag_manager_root,signal_,client_id))
+        r1 = conn.getresponse()
+        repsone_json_data=r1.read()
+        logger.debug("get response status:%s reason:%s,content:%s" %(r1.status, r1.reason,repsone_json_data))
+        ag_manager_cmd=json.loads(repsone_json_data)
+        logger.debug("tran json data[%s] is success! "%(repsone_json_data))
+        agent_cmd=ag_manager_cmd["cmd"]
+        logger.debug("json data from agentManger cmd[%s] "%(agent_cmd))
+
+
         if child_ is None:
-
-            logger.debug("agent heartbeat url:\"/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\"}"%(ag_manager_root,signal_,client_id))
-            conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\"}"%(ag_manager_root,signal_,client_id))
-            r1 = conn.getresponse()
-            repsone_json_data=r1.read()
-            logger.debug("get response status:%s reason:%s,content:%s" %(r1.status, r1.reason,repsone_json_data))
-
-            ag_manager_cmd=json.loads(repsone_json_data)
-            logger.debug("tran json data[%s] is success! "%(repsone_json_data))
-
-            agent_cmd=ag_manager_cmd["cmd"]
-            logger.debug("json data from agentManger cmd[%s] "%(agent_cmd))
-
             if agent_cmd =="start":
                 signal_="start"
                 job_id=ag_manager_cmd["command"]["job_id"]
                 res_url=ag_manager_cmd["command"]["res_url"]
                 file_name=ag_manager_cmd["command"]["file_name"]
 
-
-
         else:
+
             if subprocess.Popen.poll(child_) is not None:
                 logger.debug("job is end...")
-                # syn end stat to agent_manager 
+                # syn end stat to agent_manager
                 child_=None
                 child_staus_=None
                 signal_="wait"
+                conn.request("GET", "/%s?agent_cmd={\"cmd\":\"%s\",\"client_id\":\"%s\",\"job_id\":\"%s\",\"job_process\":\"%s\"}"%(ag_manager_root,signal_,client_id,job_id,"job is end"))
+
             elif child_staus_=="run":
                 s=child_.stdout.readline()
                 s=s.replace('\n','').replace('\r','')
